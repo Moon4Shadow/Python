@@ -3,6 +3,7 @@ import requests
 import urllib
 import re
 import time
+import socket
 
 singleCharDict = { 'w':"a", 'k':"b", 'v':"c", '1':"d", 'j':"e", 'u':"f", '2':"g", 'i':"h",
                    't':"i", '3':"j", 'h':"k", 's':"l", '4':"m", 'g':"n", '5':"o", 'r':"p",
@@ -28,10 +29,11 @@ def parseBaiduPicSearchUrl( url ):
 # queryWord 搜索关键词
 # word 搜索关键词
 # pn （0,30,60，...）偏移值为30
-def baiduPicSearchUrlBuild( keyWord, offSet ):
+def baiduPicSearchUrlBuild( keyWord, pageNum, offSet ):
     '构建百度图片搜索url(已简化)'
-    keyWord = urllib.parse.quote(keyWord)
-    url = 'http://image.baidu.com/search/acjson?tn=resultjson_com&ipn=rj&ct=201326592&queryWord=' + keyWord + '&word=' + keyWord +'&&pn=' + str(offSet) + '&rn=30'
+    _keyWord = urllib.parse.quote(keyWord)
+    _pageNum = pageNum * offSet
+    url = 'http://image.baidu.com/search/acjson?tn=resultjson_com&ipn=rj&ct=201326592&queryWord=' + _keyWord + '&word=' + _keyWord +'&&pn=' + str(_pageNum) + '&rn=' + str(offSet)
     return url
 
 """
@@ -43,18 +45,43 @@ req = requests.get(url, header)
 hData= urllib.request.urlopen(req.url).read()
 """
 print('请输入搜索关键字：')
-keyWord = '广工' #input()
+keyWord = '刘亦菲|王菲' #input()
 print('请输入爬取页数：')
-pageNum = 20 #int(input())
+pageNum = 1000 #int(input())
 while pageNum <= 0:
     print('爬取页数错误，请重新输入：')
     pageNum = int(input())
+print('请输入偏移值：')
+offSet = 30 #int(input())
+while offSet <= 0:
+    print('偏移值错误，请重新输入：')
+    offSet = int(input())
 
 i = 0
-j = 1
+total = 1
+timeout = 2
+socket.setdefaulttimeout(timeout)
 while i < pageNum:
-    url = baiduPicSearchUrlBuild(keyWord, i * 30)
-    hData = urllib.request.urlopen(url).read()
+    j = 1
+    url = baiduPicSearchUrlBuild(keyWord, i, offSet)
+
+    leftCount = 50
+    while leftCount > 0:
+        try:
+            hData = urllib.request.urlopen(url).read()
+            break
+        except socket.timeout as e:
+            leftCount -= 1
+            print( "Error: timeout " + "leftCount:" + str(leftCount))
+            continue
+        except urllib.error.URLError as e:
+            leftCount -= 1
+            print("Error: URLError " + "leftCount:" + str(leftCount))
+            #continue
+    if leftCount <= 0:
+        print("page:" + str(i) + " can not access - socket timout:", url)
+        i += 1
+        continue
     # 不直接用json.load()解析,可能会因格式出错
     # 故，选择直接对获取的数据进行正则筛选，获取目标数据
     restr = "\"objURL\":\"(ippr[^,]*)"
@@ -65,8 +92,13 @@ while i < pageNum:
         l = list(objURL.split('&url='))  # 特殊处理：url中提取包含的url
         if len(l) > 1:
             objURL = l[-1]
-        print('objURL ' + str(j) + ':' + objURL)
+        print('page:' + str(i) + '-' + str(j) + ' objURL ' + str(total) + ':' + objURL)
         j += 1
-    i += 1
-    time.sleep(0.3)
+        total += 1
+    if len(urlList) < offSet:
+        i += 1
+        break
+    else:
+        i += 1
+
 
